@@ -1,0 +1,1601 @@
+{
+    "$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "factoryName": {
+            "type": "string",
+            "metadata": "Data Factory name",
+            "defaultValue": "covid-reporting-adf-yb"
+        },
+        "tr_ingest_popualtion_data_properties_typeProperties_scope": {
+            "type": "string",
+            "defaultValue": "/subscriptions/0b4b96ae-8b37-4973-8ba0-96d440150608/resourceGroups/covid-reporting-rg/providers/Microsoft.Storage/storageAccounts/covidsayb"
+        }
+    },
+    "variables": {
+        "factoryId": "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'))]"
+    },
+    "resources": [
+        {
+            "name": "[concat(parameters('factoryName'), '/df_transform_cases_deaths')]",
+            "type": "Microsoft.DataFactory/factories/dataflows",
+            "apiVersion": "2018-06-01",
+            "properties": {
+                "type": "MappingDataFlow",
+                "typeProperties": {
+                    "sources": [
+                        {
+                            "dataset": {
+                                "referenceName": "ds_raw_cases_and_deaths",
+                                "type": "DatasetReference"
+                            },
+                            "name": "CasesandDeathSource"
+                        },
+                        {
+                            "dataset": {
+                                "referenceName": "ds_country_lookup",
+                                "type": "DatasetReference"
+                            },
+                            "name": "countrylookup"
+                        }
+                    ],
+                    "sinks": [
+                        {
+                            "dataset": {
+                                "referenceName": "ds_processed_cases_and_deaths",
+                                "type": "DatasetReference"
+                            },
+                            "name": "casesanddeathssink"
+                        }
+                    ],
+                    "transformations": [
+                        {
+                            "name": "FilterEuropeonly"
+                        },
+                        {
+                            "name": "selectonlyrequiredfields"
+                        },
+                        {
+                            "name": "pivotcounts"
+                        },
+                        {
+                            "name": "lookupcountry"
+                        },
+                        {
+                            "name": "selectforsink"
+                        }
+                    ],
+                    "scriptLines": [
+                        "source(output(",
+                        "          country as string,",
+                        "          country_code as string,",
+                        "          continent as string,",
+                        "          population as string,",
+                        "          indicator as string,",
+                        "          daily_count as integer,",
+                        "          date as string,",
+                        "          rate_14_day as string,",
+                        "          source as string",
+                        "     ),",
+                        "     allowSchemaDrift: true,",
+                        "     validateSchema: false,",
+                        "     ignoreNoFilesFound: false) ~> CasesandDeathSource",
+                        "source(output(",
+                        "          country as string,",
+                        "          country_code_2_digit as string,",
+                        "          country_code_3_digit as string,",
+                        "          continent as string,",
+                        "          population as integer",
+                        "     ),",
+                        "     allowSchemaDrift: true,",
+                        "     validateSchema: false,",
+                        "     ignoreNoFilesFound: false) ~> countrylookup",
+                        "CasesandDeathSource filter(continent == 'Europe' && not(isNull(country_code))) ~> FilterEuropeonly",
+                        "FilterEuropeonly select(mapColumn(",
+                        "          country,",
+                        "          country_code,",
+                        "          population,",
+                        "          indicator,",
+                        "          daily_count,",
+                        "          source,",
+                        "          each(match(name=='date'),",
+                        "               'reported'+'_date' = $$)",
+                        "     ),",
+                        "     skipDuplicateMapInputs: false,",
+                        "     skipDuplicateMapOutputs: false) ~> selectonlyrequiredfields",
+                        "selectonlyrequiredfields pivot(groupBy(country,",
+                        "          country_code,",
+                        "          population,",
+                        "          source,",
+                        "          reported_date),",
+                        "     pivotBy(indicator, ['confirmed cases', 'deaths']),",
+                        "     count = sum(daily_count),",
+                        "     columnNaming: '$V_$N',",
+                        "     lateral: true) ~> pivotcounts",
+                        "pivotcounts, countrylookup lookup(pivotcounts@country == countrylookup@country,",
+                        "     multiple: false,",
+                        "     pickup: 'any',",
+                        "     broadcast: 'auto')~> lookupcountry",
+                        "lookupcountry select(mapColumn(",
+                        "          country = pivotcounts@country,",
+                        "          country_code_2_digit,",
+                        "          country_code_3_digit,",
+                        "          population = pivotcounts@population,",
+                        "          {confirmed cases_count},",
+                        "          deaths_count,",
+                        "          reported_date,",
+                        "          source",
+                        "     ),",
+                        "     skipDuplicateMapInputs: true,",
+                        "     skipDuplicateMapOutputs: true) ~> selectforsink",
+                        "selectforsink sink(allowSchemaDrift: true,",
+                        "     validateSchema: false,",
+                        "     umask: 0022,",
+                        "     preCommands: [],",
+                        "     postCommands: [],",
+                        "     skipDuplicateMapInputs: true,",
+                        "     skipDuplicateMapOutputs: true) ~> casesanddeathssink"
+                    ]
+                }
+            },
+            "dependsOn": []
+        },
+        {
+            "name": "[concat(parameters('factoryName'), '/df_transform_hospital_admissions')]",
+            "type": "Microsoft.DataFactory/factories/dataflows",
+            "apiVersion": "2018-06-01",
+            "properties": {
+                "type": "MappingDataFlow",
+                "typeProperties": {
+                    "sources": [
+                        {
+                            "dataset": {
+                                "referenceName": "ds_raw_hospital_admissions",
+                                "type": "DatasetReference"
+                            },
+                            "name": "hospitaladmissions"
+                        },
+                        {
+                            "dataset": {
+                                "referenceName": "ds_country_lookup",
+                                "type": "DatasetReference"
+                            },
+                            "name": "countrylookup"
+                        },
+                        {
+                            "dataset": {
+                                "referenceName": "ds_dim_date_lookup",
+                                "type": "DatasetReference"
+                            },
+                            "name": "dimdate"
+                        }
+                    ],
+                    "sinks": [
+                        {
+                            "dataset": {
+                                "referenceName": "ds_processed_daily_hospital_admission",
+                                "type": "DatasetReference"
+                            },
+                            "name": "dailysink"
+                        },
+                        {
+                            "dataset": {
+                                "referenceName": "ds_processed_weekly_hospital_admission",
+                                "type": "DatasetReference"
+                            },
+                            "name": "sinkweekly"
+                        }
+                    ],
+                    "transformations": [
+                        {
+                            "name": "requiredcolumns"
+                        },
+                        {
+                            "name": "lookupRequiredfields"
+                        },
+                        {
+                            "name": "selectRequiredFields"
+                        },
+                        {
+                            "name": "dailyInfo"
+                        },
+                        {
+                            "name": "aggregateDimDate"
+                        },
+                        {
+                            "name": "joinwithDate"
+                        },
+                        {
+                            "name": "pivotdaily"
+                        },
+                        {
+                            "name": "pivotweekly"
+                        },
+                        {
+                            "name": "sortbasedondate"
+                        },
+                        {
+                            "name": "sortweekly"
+                        },
+                        {
+                            "name": "selectdaily"
+                        },
+                        {
+                            "name": "selectweekly"
+                        },
+                        {
+                            "name": "joinwithdate2"
+                        }
+                    ],
+                    "scriptLines": [
+                        "source(output(",
+                        "          country as string,",
+                        "          indicator as string,",
+                        "          date as date,",
+                        "          year_week as string,",
+                        "          value as double,",
+                        "          source as string,",
+                        "          url as string",
+                        "     ),",
+                        "     allowSchemaDrift: true,",
+                        "     validateSchema: false,",
+                        "     ignoreNoFilesFound: false) ~> hospitaladmissions",
+                        "source(output(",
+                        "          country as string,",
+                        "          country_code_2_digit as string,",
+                        "          country_code_3_digit as string,",
+                        "          continent as string,",
+                        "          population as integer",
+                        "     ),",
+                        "     allowSchemaDrift: true,",
+                        "     validateSchema: false,",
+                        "     ignoreNoFilesFound: false) ~> countrylookup",
+                        "source(output(",
+                        "          date_key as string,",
+                        "          date as date,",
+                        "          year as integer,",
+                        "          month as integer,",
+                        "          day as integer,",
+                        "          day_name as string,",
+                        "          day_of_year as short,",
+                        "          week_of_month as short,",
+                        "          week_of_year as short,",
+                        "          month_name as string,",
+                        "          year_month as integer,",
+                        "          year_week as integer",
+                        "     ),",
+                        "     allowSchemaDrift: true,",
+                        "     validateSchema: false,",
+                        "     ignoreNoFilesFound: false) ~> dimdate",
+                        "hospitaladmissions select(mapColumn(",
+                        "          country,",
+                        "          indicator,",
+                        "          reported_date = date,",
+                        "          reported_year_week = year_week,",
+                        "          value,",
+                        "          source",
+                        "     ),",
+                        "     skipDuplicateMapInputs: true,",
+                        "     skipDuplicateMapOutputs: true) ~> requiredcolumns",
+                        "requiredcolumns, countrylookup lookup(requiredcolumns@country == countrylookup@country,",
+                        "     multiple: false,",
+                        "     pickup: 'any',",
+                        "     broadcast: 'auto')~> lookupRequiredfields",
+                        "lookupRequiredfields select(mapColumn(",
+                        "          country = requiredcolumns@country,",
+                        "          indicator,",
+                        "          reported_date,",
+                        "          reported_year_week,",
+                        "          value,",
+                        "          source,",
+                        "          country = countrylookup@country,",
+                        "          country_code_2_digit,",
+                        "          country_code_3_digit,",
+                        "          population",
+                        "     ),",
+                        "     skipDuplicateMapInputs: true,",
+                        "     skipDuplicateMapOutputs: true) ~> selectRequiredFields",
+                        "selectRequiredFields split(indicator == 'Daily hospital occupancy'||indicator == 'Daily ICU occupancy',",
+                        "     disjoint: false) ~> dailyInfo@(Daily, weekly)",
+                        "dimdate aggregate(groupBy(ecdc_year_week = concat(toString(year),'-W',lpad(toString(week_of_year),2,'0'))),",
+                        "     week_start_date = min(date),",
+                        "          week_end_date = max(date)) ~> aggregateDimDate",
+                        "dailyInfo@Daily, aggregateDimDate join(reported_year_week == ecdc_year_week,",
+                        "     joinType:'inner',",
+                        "     matchType:'exact',",
+                        "     ignoreSpaces: false,",
+                        "     broadcast: 'auto')~> joinwithDate",
+                        "joinwithDate pivot(groupBy(country,",
+                        "          country_code_2_digit,",
+                        "          country_code_3_digit,",
+                        "          population,",
+                        "          reported_date,",
+                        "          source),",
+                        "     pivotBy(indicator, ['Daily hospital occupancy', 'Daily ICU occupancy']),",
+                        "     count = sum(value),",
+                        "     columnNaming: '$V_$N',",
+                        "     lateral: true) ~> pivotdaily",
+                        "joinwithdate2 pivot(groupBy(country,",
+                        "          source,",
+                        "          country_code_2_digit,",
+                        "          country_code_3_digit,",
+                        "          reported_year_week,",
+                        "          population,",
+                        "          week_start_date,",
+                        "          week_end_date),",
+                        "     pivotBy(indicator, ['Weekly new hospital admissions per 100k', 'Weekly new ICU admissions per 100k']),",
+                        "     count = sum(value),",
+                        "     columnNaming: '$V_$N',",
+                        "     lateral: true) ~> pivotweekly",
+                        "pivotdaily sort(desc(reported_date, true),",
+                        "     asc(country, true)) ~> sortbasedondate",
+                        "pivotweekly sort(desc(reported_year_week, true),",
+                        "     asc(country, true)) ~> sortweekly",
+                        "sortbasedondate select(mapColumn(",
+                        "          country,",
+                        "          country_code_2_digit,",
+                        "          country_code_3_digit,",
+                        "          population,",
+                        "          reported_date,",
+                        "          hospital_occupancy_count = {Daily hospital occupancy_count},",
+                        "          ICU_occupancy_count = {Daily ICU occupancy_count},",
+                        "          source",
+                        "     ),",
+                        "     skipDuplicateMapInputs: true,",
+                        "     skipDuplicateMapOutputs: true) ~> selectdaily",
+                        "sortweekly select(mapColumn(",
+                        "          country,",
+                        "          country_code_2_digit,",
+                        "          country_code_3_digit,",
+                        "          population,",
+                        "          reported_year_week,",
+                        "          reported_week_start_date = week_start_date,",
+                        "          reported_week_end_date = week_end_date,",
+                        "          new_hospital_occupancy_count = {Weekly new hospital admissions per 100k_count},",
+                        "          new_ICU_occupancy_count = {Weekly new ICU admissions per 100k_count},",
+                        "          source",
+                        "     ),",
+                        "     skipDuplicateMapInputs: false,",
+                        "     skipDuplicateMapOutputs: false) ~> selectweekly",
+                        "dailyInfo@weekly, aggregateDimDate join(reported_year_week == ecdc_year_week,",
+                        "     joinType:'inner',",
+                        "     matchType:'exact',",
+                        "     ignoreSpaces: false,",
+                        "     broadcast: 'auto')~> joinwithdate2",
+                        "selectdaily sink(allowSchemaDrift: true,",
+                        "     validateSchema: false,",
+                        "     umask: 0022,",
+                        "     preCommands: [],",
+                        "     postCommands: [],",
+                        "     skipDuplicateMapInputs: true,",
+                        "     skipDuplicateMapOutputs: true) ~> dailysink",
+                        "selectweekly sink(allowSchemaDrift: true,",
+                        "     validateSchema: false,",
+                        "     umask: 0022,",
+                        "     preCommands: [],",
+                        "     postCommands: [],",
+                        "     skipDuplicateMapInputs: true,",
+                        "     skipDuplicateMapOutputs: true) ~> sinkweekly"
+                    ]
+                }
+            },
+            "dependsOn": []
+        },
+        {
+            "name": "[concat(parameters('factoryName'), '/pl_ingest_population_data')]",
+            "type": "Microsoft.DataFactory/factories/pipelines",
+            "apiVersion": "2018-06-01",
+            "properties": {
+                "activities": [
+                    {
+                        "name": "check_file_exists",
+                        "type": "Validation",
+                        "dependsOn": [],
+                        "userProperties": [],
+                        "typeProperties": {
+                            "dataset": {
+                                "referenceName": "ds_population_raw_gz",
+                                "type": "DatasetReference",
+                                "parameters": {}
+                            },
+                            "timeout": "0.00:02:00",
+                            "sleep": 10,
+                            "minimumSize": 1024
+                        }
+                    },
+                    {
+                        "name": "Get file Metadata",
+                        "type": "GetMetadata",
+                        "dependsOn": [
+                            {
+                                "activity": "check_file_exists",
+                                "dependencyConditions": [
+                                    "Succeeded"
+                                ]
+                            }
+                        ],
+                        "policy": {
+                            "timeout": "0.12:00:00",
+                            "retry": 0,
+                            "retryIntervalInSeconds": 30,
+                            "secureOutput": false,
+                            "secureInput": false
+                        },
+                        "userProperties": [],
+                        "typeProperties": {
+                            "dataset": {
+                                "referenceName": "ds_population_raw_gz",
+                                "type": "DatasetReference",
+                                "parameters": {}
+                            },
+                            "fieldList": [
+                                "columnCount",
+                                "size",
+                                "exists"
+                            ],
+                            "storeSettings": {
+                                "type": "AzureBlobStorageReadSettings",
+                                "recursive": true,
+                                "enablePartitionDiscovery": false
+                            },
+                            "formatSettings": {
+                                "type": "DelimitedTextReadSettings"
+                            }
+                        }
+                    },
+                    {
+                        "name": "If Column count matches",
+                        "type": "IfCondition",
+                        "dependsOn": [
+                            {
+                                "activity": "Get file Metadata",
+                                "dependencyConditions": [
+                                    "Succeeded"
+                                ]
+                            }
+                        ],
+                        "userProperties": [],
+                        "typeProperties": {
+                            "expression": {
+                                "value": "@equals(activity('Get file Metadata').output.columnCount, 13)",
+                                "type": "Expression"
+                            },
+                            "ifFalseActivities": [
+                                {
+                                    "name": "send email",
+                                    "type": "WebActivity",
+                                    "dependsOn": [],
+                                    "policy": {
+                                        "timeout": "0.12:00:00",
+                                        "retry": 0,
+                                        "retryIntervalInSeconds": 30,
+                                        "secureOutput": false,
+                                        "secureInput": false
+                                    },
+                                    "userProperties": [],
+                                    "typeProperties": {
+                                        "method": "POST",
+                                        "headers": {},
+                                        "url": "https://file_incompaitable",
+                                        "body": "dummy"
+                                    }
+                                }
+                            ],
+                            "ifTrueActivities": [
+                                {
+                                    "name": "Copy_population_data",
+                                    "type": "Copy",
+                                    "dependsOn": [],
+                                    "policy": {
+                                        "timeout": "0.00:10:00",
+                                        "retry": 0,
+                                        "retryIntervalInSeconds": 30,
+                                        "secureOutput": false,
+                                        "secureInput": false
+                                    },
+                                    "userProperties": [],
+                                    "typeProperties": {
+                                        "source": {
+                                            "type": "DelimitedTextSource",
+                                            "storeSettings": {
+                                                "type": "AzureBlobStorageReadSettings",
+                                                "recursive": true,
+                                                "enablePartitionDiscovery": false
+                                            },
+                                            "formatSettings": {
+                                                "type": "DelimitedTextReadSettings"
+                                            }
+                                        },
+                                        "sink": {
+                                            "type": "DelimitedTextSink",
+                                            "storeSettings": {
+                                                "type": "AzureBlobFSWriteSettings"
+                                            },
+                                            "formatSettings": {
+                                                "type": "DelimitedTextWriteSettings",
+                                                "quoteAllText": true,
+                                                "fileExtension": ".txt"
+                                            }
+                                        },
+                                        "enableStaging": false,
+                                        "translator": {
+                                            "type": "TabularTranslator",
+                                            "typeConversion": true,
+                                            "typeConversionSettings": {
+                                                "allowDataTruncation": true,
+                                                "treatBooleanAsNumber": false
+                                            }
+                                        }
+                                    },
+                                    "inputs": [
+                                        {
+                                            "referenceName": "ds_population_raw_gz",
+                                            "type": "DatasetReference",
+                                            "parameters": {}
+                                        }
+                                    ],
+                                    "outputs": [
+                                        {
+                                            "referenceName": "ds_population_raw_tsv",
+                                            "type": "DatasetReference",
+                                            "parameters": {}
+                                        }
+                                    ]
+                                },
+                                {
+                                    "name": "Delete file after successful copy",
+                                    "type": "Delete",
+                                    "dependsOn": [
+                                        {
+                                            "activity": "Copy_population_data",
+                                            "dependencyConditions": [
+                                                "Succeeded"
+                                            ]
+                                        }
+                                    ],
+                                    "policy": {
+                                        "timeout": "0.12:00:00",
+                                        "retry": 0,
+                                        "retryIntervalInSeconds": 30,
+                                        "secureOutput": false,
+                                        "secureInput": false
+                                    },
+                                    "userProperties": [],
+                                    "typeProperties": {
+                                        "dataset": {
+                                            "referenceName": "ds_population_raw_gz",
+                                            "type": "DatasetReference",
+                                            "parameters": {}
+                                        },
+                                        "enableLogging": false,
+                                        "storeSettings": {
+                                            "type": "AzureBlobStorageReadSettings",
+                                            "recursive": true,
+                                            "enablePartitionDiscovery": false
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                ],
+                "concurrency": 1,
+                "policy": {
+                    "elapsedTimeMetric": {}
+                },
+                "folder": {
+                    "name": "INGEST"
+                },
+                "annotations": [],
+                "lastPublishTime": "2026-01-10T09:23:03Z"
+            },
+            "dependsOn": []
+        },
+        {
+            "name": "[concat(parameters('factoryName'), '/pl_ingest_ecdc_data')]",
+            "type": "Microsoft.DataFactory/factories/pipelines",
+            "apiVersion": "2018-06-01",
+            "properties": {
+                "activities": [
+                    {
+                        "name": "Lookup_ecdc_file_list",
+                        "type": "Lookup",
+                        "dependsOn": [],
+                        "policy": {
+                            "timeout": "0.12:00:00",
+                            "retry": 0,
+                            "retryIntervalInSeconds": 30,
+                            "secureOutput": false,
+                            "secureInput": false
+                        },
+                        "userProperties": [],
+                        "typeProperties": {
+                            "source": {
+                                "type": "JsonSource",
+                                "storeSettings": {
+                                    "type": "AzureBlobStorageReadSettings",
+                                    "recursive": true,
+                                    "enablePartitionDiscovery": false
+                                },
+                                "formatSettings": {
+                                    "type": "JsonReadSettings"
+                                }
+                            },
+                            "dataset": {
+                                "referenceName": "ds_ecdc_file_list",
+                                "type": "DatasetReference",
+                                "parameters": {}
+                            },
+                            "firstRowOnly": false
+                        }
+                    },
+                    {
+                        "name": "execute_copy_for_every_record",
+                        "type": "ForEach",
+                        "dependsOn": [
+                            {
+                                "activity": "Lookup_ecdc_file_list",
+                                "dependencyConditions": [
+                                    "Succeeded"
+                                ]
+                            }
+                        ],
+                        "userProperties": [],
+                        "typeProperties": {
+                            "items": {
+                                "value": "@activity('Lookup_ecdc_file_list').output.value",
+                                "type": "Expression"
+                            },
+                            "activities": [
+                                {
+                                    "name": "Copy ECDC Data_copy",
+                                    "type": "Copy",
+                                    "dependsOn": [],
+                                    "policy": {
+                                        "timeout": "0.12:00:00",
+                                        "retry": 0,
+                                        "retryIntervalInSeconds": 30,
+                                        "secureOutput": false,
+                                        "secureInput": false
+                                    },
+                                    "userProperties": [],
+                                    "typeProperties": {
+                                        "source": {
+                                            "type": "DelimitedTextSource",
+                                            "storeSettings": {
+                                                "type": "HttpReadSettings",
+                                                "requestMethod": "GET"
+                                            },
+                                            "formatSettings": {
+                                                "type": "DelimitedTextReadSettings"
+                                            }
+                                        },
+                                        "sink": {
+                                            "type": "DelimitedTextSink",
+                                            "storeSettings": {
+                                                "type": "AzureBlobFSWriteSettings"
+                                            },
+                                            "formatSettings": {
+                                                "type": "DelimitedTextWriteSettings",
+                                                "quoteAllText": true,
+                                                "fileExtension": ".txt"
+                                            }
+                                        },
+                                        "enableStaging": false,
+                                        "translator": {
+                                            "type": "TabularTranslator",
+                                            "typeConversion": true,
+                                            "typeConversionSettings": {
+                                                "allowDataTruncation": true,
+                                                "treatBooleanAsNumber": false
+                                            }
+                                        }
+                                    },
+                                    "inputs": [
+                                        {
+                                            "referenceName": "ds_ecdc_raw_csv_http",
+                                            "type": "DatasetReference",
+                                            "parameters": {
+                                                "relativeURL": {
+                                                    "value": "@item().sourceRelativeURL",
+                                                    "type": "Expression"
+                                                },
+                                                "baseurl": {
+                                                    "value": "@item().sourcebaseurl",
+                                                    "type": "Expression"
+                                                }
+                                            }
+                                        }
+                                    ],
+                                    "outputs": [
+                                        {
+                                            "referenceName": "ds_ecdc_raw_csv_dl",
+                                            "type": "DatasetReference",
+                                            "parameters": {
+                                                "filename": {
+                                                    "value": "@item().sinkFileName",
+                                                    "type": "Expression"
+                                                }
+                                            }
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    }
+                ],
+                "concurrency": 1,
+                "policy": {
+                    "elapsedTimeMetric": {}
+                },
+                "folder": {
+                    "name": "INGEST"
+                },
+                "annotations": [],
+                "lastPublishTime": "2026-01-10T09:23:03Z"
+            },
+            "dependsOn": []
+        },
+        {
+            "name": "[concat(parameters('factoryName'), '/pl_sqlize_HOSPITAL_ADMISSIONS_daily')]",
+            "type": "Microsoft.DataFactory/factories/pipelines",
+            "apiVersion": "2018-06-01",
+            "properties": {
+                "activities": [
+                    {
+                        "name": "Copy HOSPITAL ADMISSIONS",
+                        "type": "Copy",
+                        "dependsOn": [],
+                        "policy": {
+                            "timeout": "0.12:00:00",
+                            "retry": 0,
+                            "retryIntervalInSeconds": 30,
+                            "secureOutput": false,
+                            "secureInput": false
+                        },
+                        "userProperties": [],
+                        "typeProperties": {
+                            "source": {
+                                "type": "DelimitedTextSource",
+                                "storeSettings": {
+                                    "type": "AzureBlobFSReadSettings",
+                                    "recursive": true,
+                                    "wildcardFileName": "*",
+                                    "enablePartitionDiscovery": false
+                                },
+                                "formatSettings": {
+                                    "type": "DelimitedTextReadSettings"
+                                }
+                            },
+                            "sink": {
+                                "type": "AzureSqlSink",
+                                "preCopyScript": "truncate table [covid_reporting].[hospital_admissions_daily];",
+                                "writeBehavior": "insert",
+                                "sqlWriterUseTableLock": false,
+                                "disableMetricsCollection": false
+                            },
+                            "enableStaging": false,
+                            "translator": {
+                                "type": "TabularTranslator",
+                                "mappings": [
+                                    {
+                                        "source": {
+                                            "name": "country",
+                                            "type": "String",
+                                            "physicalType": "String"
+                                        },
+                                        "sink": {
+                                            "name": "country",
+                                            "type": "String",
+                                            "physicalType": "varchar"
+                                        }
+                                    },
+                                    {
+                                        "source": {
+                                            "name": "country_code_2_digit",
+                                            "type": "String",
+                                            "physicalType": "String"
+                                        },
+                                        "sink": {
+                                            "name": "country_code_2_digit",
+                                            "type": "String",
+                                            "physicalType": "varchar"
+                                        }
+                                    },
+                                    {
+                                        "source": {
+                                            "name": "country_code_3_digit",
+                                            "type": "String",
+                                            "physicalType": "String"
+                                        },
+                                        "sink": {
+                                            "name": "country_code_3_digit",
+                                            "type": "String",
+                                            "physicalType": "varchar"
+                                        }
+                                    },
+                                    {
+                                        "source": {
+                                            "name": "population",
+                                            "type": "String",
+                                            "physicalType": "String"
+                                        },
+                                        "sink": {
+                                            "name": "population",
+                                            "type": "Int64",
+                                            "physicalType": "bigint"
+                                        }
+                                    },
+                                    {
+                                        "source": {
+                                            "name": "reported_date",
+                                            "type": "String",
+                                            "physicalType": "String"
+                                        },
+                                        "sink": {
+                                            "name": "reported_date",
+                                            "type": "Date",
+                                            "physicalType": "date"
+                                        }
+                                    },
+                                    {
+                                        "source": {
+                                            "name": "hospital_occupancy_count",
+                                            "type": "String",
+                                            "physicalType": "String"
+                                        },
+                                        "sink": {
+                                            "name": "hospital_occupancy_count",
+                                            "type": "Decimal",
+                                            "physicalType": "decimal",
+                                            "scale": 10,
+                                            "precision": 18
+                                        }
+                                    },
+                                    {
+                                        "source": {
+                                            "name": "ICU_occupancy_count",
+                                            "type": "String",
+                                            "physicalType": "String"
+                                        },
+                                        "sink": {
+                                            "name": "icu_occupancy_count",
+                                            "type": "Int64",
+                                            "physicalType": "bigint"
+                                        }
+                                    },
+                                    {
+                                        "source": {
+                                            "name": "source",
+                                            "type": "String",
+                                            "physicalType": "String"
+                                        },
+                                        "sink": {
+                                            "name": "source",
+                                            "type": "String",
+                                            "physicalType": "varchar"
+                                        }
+                                    }
+                                ],
+                                "typeConversion": true,
+                                "typeConversionSettings": {
+                                    "allowDataTruncation": true,
+                                    "treatBooleanAsNumber": false
+                                }
+                            }
+                        },
+                        "inputs": [
+                            {
+                                "referenceName": "ds_processed_daily_hospital_admission",
+                                "type": "DatasetReference",
+                                "parameters": {}
+                            }
+                        ],
+                        "outputs": [
+                            {
+                                "referenceName": "ds_daily_hospital_admisions",
+                                "type": "DatasetReference",
+                                "parameters": {}
+                            }
+                        ]
+                    }
+                ],
+                "policy": {
+                    "elapsedTimeMetric": {}
+                },
+                "folder": {
+                    "name": "SQLLIZE"
+                },
+                "annotations": [],
+                "lastPublishTime": "2026-01-10T09:23:03Z"
+            },
+            "dependsOn": []
+        },
+        {
+            "name": "[concat(parameters('factoryName'), '/pl_sqlize_cases_and_deaths')]",
+            "type": "Microsoft.DataFactory/factories/pipelines",
+            "apiVersion": "2018-06-01",
+            "properties": {
+                "activities": [
+                    {
+                        "name": "Copy cases and deaths",
+                        "type": "Copy",
+                        "dependsOn": [],
+                        "policy": {
+                            "timeout": "0.12:00:00",
+                            "retry": 0,
+                            "retryIntervalInSeconds": 30,
+                            "secureOutput": false,
+                            "secureInput": false
+                        },
+                        "userProperties": [],
+                        "typeProperties": {
+                            "source": {
+                                "type": "DelimitedTextSource",
+                                "storeSettings": {
+                                    "type": "AzureBlobFSReadSettings",
+                                    "recursive": true,
+                                    "wildcardFileName": "*",
+                                    "enablePartitionDiscovery": false
+                                },
+                                "formatSettings": {
+                                    "type": "DelimitedTextReadSettings"
+                                }
+                            },
+                            "sink": {
+                                "type": "AzureSqlSink",
+                                "preCopyScript": "TRUNCATE TABLE covid_reporting.cases_and_deaths;",
+                                "writeBehavior": "insert",
+                                "sqlWriterUseTableLock": false,
+                                "disableMetricsCollection": false
+                            },
+                            "enableStaging": false,
+                            "translator": {
+                                "type": "TabularTranslator",
+                                "mappings": [
+                                    {
+                                        "source": {
+                                            "name": "country",
+                                            "type": "String",
+                                            "physicalType": "String"
+                                        },
+                                        "sink": {
+                                            "name": "country",
+                                            "type": "String",
+                                            "physicalType": "varchar"
+                                        }
+                                    },
+                                    {
+                                        "source": {
+                                            "name": "country_code_2_digit",
+                                            "type": "String",
+                                            "physicalType": "String"
+                                        },
+                                        "sink": {
+                                            "name": "country_code_2_digit",
+                                            "type": "String",
+                                            "physicalType": "varchar"
+                                        }
+                                    },
+                                    {
+                                        "source": {
+                                            "name": "country_code_3_digit",
+                                            "type": "String",
+                                            "physicalType": "String"
+                                        },
+                                        "sink": {
+                                            "name": "country_code_3_digit",
+                                            "type": "String",
+                                            "physicalType": "varchar"
+                                        }
+                                    },
+                                    {
+                                        "source": {
+                                            "name": "population",
+                                            "type": "String",
+                                            "physicalType": "String"
+                                        },
+                                        "sink": {
+                                            "name": "population",
+                                            "type": "Int64",
+                                            "physicalType": "bigint"
+                                        }
+                                    },
+                                    {
+                                        "source": {
+                                            "name": "confirmed cases_count",
+                                            "type": "String",
+                                            "physicalType": "String"
+                                        },
+                                        "sink": {
+                                            "name": "cases_count",
+                                            "type": "Int64",
+                                            "physicalType": "bigint"
+                                        }
+                                    },
+                                    {
+                                        "source": {
+                                            "name": "deaths_count",
+                                            "type": "String",
+                                            "physicalType": "String"
+                                        },
+                                        "sink": {
+                                            "name": "deaths_count",
+                                            "type": "Int64",
+                                            "physicalType": "bigint"
+                                        }
+                                    },
+                                    {
+                                        "source": {
+                                            "name": "reported_date",
+                                            "type": "String",
+                                            "physicalType": "String"
+                                        },
+                                        "sink": {
+                                            "name": "reported_date",
+                                            "type": "Date",
+                                            "physicalType": "date"
+                                        }
+                                    },
+                                    {
+                                        "source": {
+                                            "name": "source",
+                                            "type": "String",
+                                            "physicalType": "String"
+                                        },
+                                        "sink": {
+                                            "name": "source",
+                                            "type": "String",
+                                            "physicalType": "varchar"
+                                        }
+                                    }
+                                ],
+                                "typeConversion": true,
+                                "typeConversionSettings": {
+                                    "allowDataTruncation": true,
+                                    "treatBooleanAsNumber": false
+                                }
+                            }
+                        },
+                        "inputs": [
+                            {
+                                "referenceName": "ds_processed_cases_and_deaths",
+                                "type": "DatasetReference",
+                                "parameters": {}
+                            }
+                        ],
+                        "outputs": [
+                            {
+                                "referenceName": "ds_sql_cases_and_deaths",
+                                "type": "DatasetReference",
+                                "parameters": {}
+                            }
+                        ]
+                    }
+                ],
+                "policy": {
+                    "elapsedTimeMetric": {}
+                },
+                "folder": {
+                    "name": "SQLLIZE"
+                },
+                "annotations": [],
+                "lastPublishTime": "2026-01-10T09:23:03Z"
+            },
+            "dependsOn": []
+        },
+        {
+            "name": "[concat(parameters('factoryName'), '/pl_sqllize_testing')]",
+            "type": "Microsoft.DataFactory/factories/pipelines",
+            "apiVersion": "2018-06-01",
+            "properties": {
+                "activities": [
+                    {
+                        "name": "Copy testing",
+                        "type": "Copy",
+                        "dependsOn": [],
+                        "policy": {
+                            "timeout": "0.12:00:00",
+                            "retry": 0,
+                            "retryIntervalInSeconds": 30,
+                            "secureOutput": false,
+                            "secureInput": false
+                        },
+                        "userProperties": [],
+                        "typeProperties": {
+                            "source": {
+                                "type": "DelimitedTextSource",
+                                "storeSettings": {
+                                    "type": "AzureBlobFSReadSettings",
+                                    "recursive": true,
+                                    "wildcardFileName": "*",
+                                    "enablePartitionDiscovery": false
+                                },
+                                "formatSettings": {
+                                    "type": "DelimitedTextReadSettings"
+                                }
+                            },
+                            "sink": {
+                                "type": "AzureSqlSink",
+                                "preCopyScript": "TRUNCATE TABLE [covid_reporting].[testing]",
+                                "writeBehavior": "insert",
+                                "sqlWriterUseTableLock": false,
+                                "disableMetricsCollection": false
+                            },
+                            "enableStaging": false,
+                            "translator": {
+                                "type": "TabularTranslator",
+                                "mappings": [
+                                    {
+                                        "source": {
+                                            "type": "String",
+                                            "ordinal": 1
+                                        },
+                                        "sink": {
+                                            "name": "country",
+                                            "type": "String",
+                                            "physicalType": "varchar"
+                                        }
+                                    },
+                                    {
+                                        "source": {
+                                            "type": "String",
+                                            "ordinal": 2
+                                        },
+                                        "sink": {
+                                            "name": "country_code_2_digit",
+                                            "type": "String",
+                                            "physicalType": "varchar"
+                                        }
+                                    },
+                                    {
+                                        "source": {
+                                            "type": "String",
+                                            "ordinal": 3
+                                        },
+                                        "sink": {
+                                            "name": "country_code_3_digit",
+                                            "type": "String",
+                                            "physicalType": "varchar"
+                                        }
+                                    },
+                                    {
+                                        "source": {
+                                            "type": "String",
+                                            "ordinal": 4
+                                        },
+                                        "sink": {
+                                            "name": "year_week",
+                                            "type": "String",
+                                            "physicalType": "varchar"
+                                        }
+                                    },
+                                    {
+                                        "source": {
+                                            "type": "String",
+                                            "ordinal": 5
+                                        },
+                                        "sink": {
+                                            "name": "week_start_date",
+                                            "type": "Date",
+                                            "physicalType": "date"
+                                        }
+                                    },
+                                    {
+                                        "source": {
+                                            "type": "String",
+                                            "ordinal": 6
+                                        },
+                                        "sink": {
+                                            "name": "week_end_date",
+                                            "type": "Date",
+                                            "physicalType": "date"
+                                        }
+                                    },
+                                    {
+                                        "source": {
+                                            "type": "String",
+                                            "ordinal": 7
+                                        },
+                                        "sink": {
+                                            "name": "new_cases",
+                                            "type": "Int64",
+                                            "physicalType": "bigint"
+                                        }
+                                    },
+                                    {
+                                        "source": {
+                                            "type": "String",
+                                            "ordinal": 8
+                                        },
+                                        "sink": {
+                                            "name": "tests_done",
+                                            "type": "Int64",
+                                            "physicalType": "bigint"
+                                        }
+                                    },
+                                    {
+                                        "source": {
+                                            "type": "String",
+                                            "ordinal": 9
+                                        },
+                                        "sink": {
+                                            "name": "population",
+                                            "type": "Int64",
+                                            "physicalType": "bigint"
+                                        }
+                                    },
+                                    {
+                                        "source": {
+                                            "type": "String",
+                                            "physicalType": "String",
+                                            "ordinal": 12
+                                        },
+                                        "sink": {
+                                            "name": "testing_data_source",
+                                            "type": "String",
+                                            "physicalType": "varchar"
+                                        }
+                                    }
+                                ],
+                                "typeConversion": true,
+                                "typeConversionSettings": {
+                                    "allowDataTruncation": true,
+                                    "treatBooleanAsNumber": false
+                                }
+                            }
+                        },
+                        "inputs": [
+                            {
+                                "referenceName": "ds_prpcessed_testing",
+                                "type": "DatasetReference",
+                                "parameters": {}
+                            }
+                        ],
+                        "outputs": [
+                            {
+                                "referenceName": "ds_sql_testing",
+                                "type": "DatasetReference",
+                                "parameters": {}
+                            }
+                        ]
+                    }
+                ],
+                "policy": {
+                    "elapsedTimeMetric": {}
+                },
+                "folder": {
+                    "name": "SQLLIZE"
+                },
+                "annotations": [],
+                "lastPublishTime": "2026-01-10T09:23:03Z"
+            },
+            "dependsOn": []
+        },
+        {
+            "name": "[concat(parameters('factoryName'), '/pl_process_cases_deaths_data')]",
+            "type": "Microsoft.DataFactory/factories/pipelines",
+            "apiVersion": "2018-06-01",
+            "properties": {
+                "activities": [
+                    {
+                        "name": "df_transform_cases_deaths",
+                        "type": "ExecuteDataFlow",
+                        "dependsOn": [],
+                        "policy": {
+                            "timeout": "0.12:00:00",
+                            "retry": 0,
+                            "retryIntervalInSeconds": 30,
+                            "secureOutput": false,
+                            "secureInput": false
+                        },
+                        "userProperties": [],
+                        "typeProperties": {
+                            "dataflow": {
+                                "referenceName": "df_transform_cases_deaths",
+                                "type": "DataFlowReference",
+                                "parameters": {},
+                                "datasetParameters": {
+                                    "CasesandDeathSource": {},
+                                    "countrylookup": {},
+                                    "casesanddeathssink": {}
+                                }
+                            },
+                            "staging": {},
+                            "compute": {
+                                "coreCount": 8,
+                                "computeType": "General"
+                            },
+                            "traceLevel": "Fine"
+                        }
+                    }
+                ],
+                "policy": {
+                    "elapsedTimeMetric": {}
+                },
+                "folder": {
+                    "name": "PROCESS"
+                },
+                "annotations": [],
+                "lastPublishTime": "2026-01-10T09:23:02Z"
+            },
+            "dependsOn": [
+                "[concat(variables('factoryId'), '/dataflows/df_transform_cases_deaths')]"
+            ]
+        },
+        {
+            "name": "[concat(parameters('factoryName'), '/pl_process_hospital_admission')]",
+            "type": "Microsoft.DataFactory/factories/pipelines",
+            "apiVersion": "2018-06-01",
+            "properties": {
+                "activities": [
+                    {
+                        "name": "df_transform_hospital_admissions",
+                        "type": "ExecuteDataFlow",
+                        "dependsOn": [],
+                        "policy": {
+                            "timeout": "0.12:00:00",
+                            "retry": 0,
+                            "retryIntervalInSeconds": 30,
+                            "secureOutput": false,
+                            "secureInput": false
+                        },
+                        "userProperties": [],
+                        "typeProperties": {
+                            "dataflow": {
+                                "referenceName": "df_transform_hospital_admissions",
+                                "type": "DataFlowReference",
+                                "parameters": {},
+                                "datasetParameters": {
+                                    "hospitaladmissions": {},
+                                    "countrylookup": {},
+                                    "dimdate": {},
+                                    "dailysink": {},
+                                    "sinkweekly": {}
+                                }
+                            },
+                            "staging": {},
+                            "compute": {
+                                "coreCount": 8,
+                                "computeType": "General"
+                            },
+                            "traceLevel": "Fine"
+                        }
+                    }
+                ],
+                "policy": {
+                    "elapsedTimeMetric": {}
+                },
+                "folder": {
+                    "name": "PROCESS"
+                },
+                "annotations": [],
+                "lastPublishTime": "2026-01-10T09:23:02Z"
+            },
+            "dependsOn": [
+                "[concat(variables('factoryId'), '/dataflows/df_transform_hospital_admissions')]"
+            ]
+        },
+        {
+            "name": "[concat(parameters('factoryName'), '/tr_ingest_popualtion_data')]",
+            "type": "Microsoft.DataFactory/factories/triggers",
+            "apiVersion": "2018-06-01",
+            "properties": {
+                "annotations": [],
+                "runtimeState": "Started",
+                "pipelines": [
+                    {
+                        "pipelineReference": {
+                            "referenceName": "pl_ingest_population_data",
+                            "type": "PipelineReference"
+                        },
+                        "parameters": {}
+                    }
+                ],
+                "type": "BlobEventsTrigger",
+                "typeProperties": {
+                    "blobPathBeginsWith": "/population/blobs/population_by_age_1.tsv",
+                    "ignoreEmptyBlobs": true,
+                    "scope": "[parameters('tr_ingest_popualtion_data_properties_typeProperties_scope')]",
+                    "events": [
+                        "Microsoft.Storage.BlobCreated"
+                    ]
+                }
+            },
+            "dependsOn": [
+                "[concat(variables('factoryId'), '/pipelines/pl_ingest_population_data')]"
+            ]
+        },
+        {
+            "name": "[concat(parameters('factoryName'), '/tr_ingest_ecdc_data')]",
+            "type": "Microsoft.DataFactory/factories/triggers",
+            "apiVersion": "2018-06-01",
+            "properties": {
+                "annotations": [],
+                "runtimeState": "Started",
+                "pipeline": {
+                    "pipelineReference": {
+                        "referenceName": "pl_ingest_ecdc_data",
+                        "type": "PipelineReference"
+                    },
+                    "parameters": {}
+                },
+                "type": "TumblingWindowTrigger",
+                "typeProperties": {
+                    "frequency": "Hour",
+                    "interval": 24,
+                    "startTime": "2026-01-09T00:00:00Z",
+                    "delay": "00:00:00",
+                    "maxConcurrency": 50,
+                    "retryPolicy": {
+                        "intervalInSeconds": 30
+                    },
+                    "dependsOn": []
+                }
+            },
+            "dependsOn": [
+                "[concat(variables('factoryId'), '/pipelines/pl_ingest_ecdc_data')]"
+            ]
+        },
+        {
+            "name": "[concat(parameters('factoryName'), '/tr_process_hospital_admission_data')]",
+            "type": "Microsoft.DataFactory/factories/triggers",
+            "apiVersion": "2018-06-01",
+            "properties": {
+                "annotations": [],
+                "runtimeState": "Started",
+                "pipeline": {
+                    "pipelineReference": {
+                        "referenceName": "pl_process_hospital_admission",
+                        "type": "PipelineReference"
+                    },
+                    "parameters": {}
+                },
+                "type": "TumblingWindowTrigger",
+                "typeProperties": {
+                    "frequency": "Hour",
+                    "interval": 24,
+                    "startTime": "2026-01-09T00:00:00Z",
+                    "delay": "00:00:00",
+                    "maxConcurrency": 50,
+                    "retryPolicy": {
+                        "intervalInSeconds": 30
+                    },
+                    "dependsOn": [
+                        {
+                            "type": "TumblingWindowTriggerDependencyReference",
+                            "referenceTrigger": {
+                                "referenceName": "tr_ingest_ecdc_data",
+                                "type": "TriggerReference"
+                            }
+                        }
+                    ]
+                }
+            },
+            "dependsOn": [
+                "[concat(variables('factoryId'), '/pipelines/pl_process_hospital_admission')]",
+                "[concat(variables('factoryId'), '/triggers/tr_ingest_ecdc_data')]"
+            ]
+        },
+        {
+            "name": "[concat(parameters('factoryName'), '/tr_process_cases_deaths_data')]",
+            "type": "Microsoft.DataFactory/factories/triggers",
+            "apiVersion": "2018-06-01",
+            "properties": {
+                "annotations": [],
+                "runtimeState": "Started",
+                "pipeline": {
+                    "pipelineReference": {
+                        "referenceName": "pl_process_cases_deaths_data",
+                        "type": "PipelineReference"
+                    },
+                    "parameters": {}
+                },
+                "type": "TumblingWindowTrigger",
+                "typeProperties": {
+                    "frequency": "Hour",
+                    "interval": 24,
+                    "startTime": "2026-01-09T00:00:00Z",
+                    "delay": "00:00:00",
+                    "maxConcurrency": 50,
+                    "retryPolicy": {
+                        "intervalInSeconds": 30
+                    },
+                    "dependsOn": [
+                        {
+                            "type": "TumblingWindowTriggerDependencyReference",
+                            "referenceTrigger": {
+                                "referenceName": "tr_ingest_ecdc_data",
+                                "type": "TriggerReference"
+                            }
+                        }
+                    ]
+                }
+            },
+            "dependsOn": [
+                "[concat(variables('factoryId'), '/pipelines/pl_process_cases_deaths_data')]",
+                "[concat(variables('factoryId'), '/triggers/tr_ingest_ecdc_data')]"
+            ]
+        },
+        {
+            "name": "[concat(parameters('factoryName'), '/tr_sqlize_hospital_admission_data')]",
+            "type": "Microsoft.DataFactory/factories/triggers",
+            "apiVersion": "2018-06-01",
+            "properties": {
+                "annotations": [],
+                "runtimeState": "Started",
+                "pipeline": {
+                    "pipelineReference": {
+                        "referenceName": "pl_sqlize_HOSPITAL_ADMISSIONS_daily",
+                        "type": "PipelineReference"
+                    },
+                    "parameters": {}
+                },
+                "type": "TumblingWindowTrigger",
+                "typeProperties": {
+                    "frequency": "Hour",
+                    "interval": 24,
+                    "startTime": "2026-01-09T00:00:00Z",
+                    "delay": "00:00:00",
+                    "maxConcurrency": 50,
+                    "retryPolicy": {
+                        "intervalInSeconds": 30
+                    },
+                    "dependsOn": [
+                        {
+                            "type": "TumblingWindowTriggerDependencyReference",
+                            "referenceTrigger": {
+                                "referenceName": "tr_process_hospital_admission_data",
+                                "type": "TriggerReference"
+                            }
+                        }
+                    ]
+                }
+            },
+            "dependsOn": [
+                "[concat(variables('factoryId'), '/pipelines/pl_sqlize_HOSPITAL_ADMISSIONS_daily')]",
+                "[concat(variables('factoryId'), '/triggers/tr_process_hospital_admission_data')]"
+            ]
+        },
+        {
+            "name": "[concat(parameters('factoryName'), '/tr_sqlize_cases_deaths_data')]",
+            "type": "Microsoft.DataFactory/factories/triggers",
+            "apiVersion": "2018-06-01",
+            "properties": {
+                "annotations": [],
+                "runtimeState": "Started",
+                "pipeline": {
+                    "pipelineReference": {
+                        "referenceName": "pl_sqlize_cases_and_deaths",
+                        "type": "PipelineReference"
+                    },
+                    "parameters": {}
+                },
+                "type": "TumblingWindowTrigger",
+                "typeProperties": {
+                    "frequency": "Hour",
+                    "interval": 24,
+                    "startTime": "2026-01-09T00:00:00Z",
+                    "delay": "00:00:00",
+                    "maxConcurrency": 50,
+                    "retryPolicy": {
+                        "intervalInSeconds": 30
+                    },
+                    "dependsOn": [
+                        {
+                            "type": "TumblingWindowTriggerDependencyReference",
+                            "referenceTrigger": {
+                                "referenceName": "tr_process_cases_deaths_data",
+                                "type": "TriggerReference"
+                            }
+                        }
+                    ]
+                }
+            },
+            "dependsOn": [
+                "[concat(variables('factoryId'), '/pipelines/pl_sqlize_cases_and_deaths')]",
+                "[concat(variables('factoryId'), '/triggers/tr_process_cases_deaths_data')]"
+            ]
+        }
+    ]
+}

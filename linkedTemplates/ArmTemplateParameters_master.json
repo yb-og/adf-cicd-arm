@@ -1,0 +1,42 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "factoryName": {
+            "value": "covid-reporting-adf-yb"
+        },
+        "ls_ablob_covidreportingsa_connectionString": {
+            "value": ""
+        },
+        "ls_adls_covidreportingdl_accountKey": {
+            "value": ""
+        },
+        "ls_sql_covid_db_password": {
+            "value": ""
+        },
+        "ls_adls_covidreportingdl_properties_typeProperties_url": {
+            "value": "https://coviddlyb.dfs.core.windows.net/"
+        },
+        "ls_http_opendata_ecdc_europa_eu_properties_typeProperties_url": {
+            "value": "@{linkedService().sourcebaseurl}"
+        },
+        "ls_sql_covid_db_properties_typeProperties_server": {
+            "value": "covid-yb.database.windows.net"
+        },
+        "ls_sql_covid_db_properties_typeProperties_database": {
+            "value": "covid_db"
+        },
+        "ls_sql_covid_db_properties_typeProperties_userName": {
+            "value": "adm"
+        },
+        "tr_ingest_popualtion_data_properties_typeProperties_scope": {
+            "value": "/subscriptions/0b4b96ae-8b37-4973-8ba0-96d440150608/resourceGroups/covid-reporting-rg/providers/Microsoft.Storage/storageAccounts/covidsayb"
+        },
+        "containerUri": {
+            "value": ""
+        },
+        "containerSasToken": {
+            "value": ""
+        }
+    }
+}
