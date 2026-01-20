@@ -2328,7 +2328,6 @@
                 "typeProperties": {
                     "blobPathBeginsWith": "/population/blobs/population_by_age_1.tsv",
                     "ignoreEmptyBlobs": true,
-                    "scope": "[parameters('tr_ingest_popualtion_data_properties_typeProperties_scope')]",
                     "events": [
                         "Microsoft.Storage.BlobCreated"
                     ]
