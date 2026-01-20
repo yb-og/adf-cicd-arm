@@ -27,5 +27,4 @@ jobs:
         template: ARMTemplateForFactory.json
         parameters: parameters-test.json
         deploymentName: adf-test-deployment
-        additionalArguments: >
-         -disableTriggers true
+    
