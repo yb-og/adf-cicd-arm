@@ -3,7 +3,7 @@
   "contentVersion": "1.0.0.0",
   "parameters": {
     "factoryName": {
-      "value": "covid-reporting-adf-test"
+      "value": "covid-reporting-adf-test-yb"
     },
     "ls_ablob_covidreportingsa_connectionString": {
       "value": ""
