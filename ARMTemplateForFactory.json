@@ -41,7 +41,7 @@
         },
         "tr_ingest_popualtion_data_properties_typeProperties_scope": {
             "type": "string",
-            "defaultValue": "/subscriptions/0b4b96ae-8b37-4973-8ba0-96d440150608/resourceGroups/covid-reporting-rg/providers/Microsoft.Storage/storageAccounts/covidsayb"
+            "defaultValue": "/subscriptions/0b4b96ae-8b37-4973-8ba0-96d440150608/resourceGroups/covid-reporting-rg/providers/microsoft.storage/storageaccounts/covidsayb"
         }
     },
     "variables": {
