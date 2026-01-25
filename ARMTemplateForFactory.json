@@ -2326,7 +2326,7 @@
                 ],
                 "type": "BlobEventsTrigger",
                 "typeProperties": {
-                    "scope": "/subscriptions/0b4b96ae-8b37-4973-8ba0-96d440150608/resourceGroups/covid-reporting-test-rg/providers/Microsoft.Storage/storageAccounts/covidsayb",
+                    "scope": "/subscriptions/0b4b96ae-8b37-4973-8ba0-96d440150608/resourceGroups/covid-reporting-rg/providers/Microsoft.Storage/storageAccounts/covidsayb",
                     "blobPathBeginsWith": "/population/blobs/population_by_age_1.tsv",
                     "ignoreEmptyBlobs": true,
                     "events": [
